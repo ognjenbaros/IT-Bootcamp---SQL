@@ -1,0 +1,181 @@
+-- 1. Колико утакмица је одиграно у фебруару 2025?
+
+SELECT COUNT(match_id) AS no_of_matches
+FROM matches
+WHERE kickoff_ts >= '2025-02' AND kickoff_ts < '2025-03';
+
+-- U februaru 2025. odigrano je 40 utakmica
+
+
+
+-- 2. Који стадион има највећи капацитет, а који је највећи стадион неког клуба?
+
+
+SELECT stadium_name, capacity FROM stadiums ORDER BY capacity DESC LIMIT 1;
+
+-- Najveći kapacitet ima nacionalni stadion (National Stadium) sa 80.000 mesta.
+
+
+SELECT stadium_name, capacity
+FROM stadiums
+WHERE stadium_name NOT IN ('National Stadium') 
+ORDER BY capacity DESC
+LIMIT 1;
+-- Najveći kapacitet nekog kluba ima stadion Harbourside Park sa 52.000 mesta.
+
+
+
+--  3. Колико играча у лиги има српско држављанство (nationality = 'Serbia')?
+
+ SELECT COUNT(player_id) AS no_of_players FROM players WHERE nationality = 'Serbia';
+
+ -- U ligi igraju 42 igrača iz Srbije
+
+
+
+-- 4. Колико утакмица је завршено резултатом 1:1?
+
+SELECT COUNT(match_id)
+FROM matches
+WHERE home_goals = 1 AND away_goals = 1;
+
+-- U sezonama 2023/24 i 2024/25 bilo je 94 utakmice sa konačnim rezultatom 1:1
+
+
+
+-- 5. Колика је просечна посета по сезони?
+
+SELECT season, ROUND(AVG(attendance), 2) AS avg_attendance FROM matches GROUP BY season;
+
+-- U sezoni 2023/24 je prosečna poseta po meču bila 24252.95,
+-- dok je u sezoni 2024/25 bila 24199.49.
+
+
+
+-- 6. Колико голова је дато из пенала по сезони?
+
+SELECT  m.season,
+        SUM(CASE WHEN me.event_type IN ('penalty_goal') THEN 1 ELSE 0 END) AS total_penalties
+FROM match_events AS me
+JOIN matches AS m ON m.match_id = me.match_id
+GROUP BY m.season;
+
+-- U sezoni 2023/24 postignuta su 104 gola iz penala,
+-- dok smo u sezoni 2024/25 videli 5 golova iz penala više, 109
+
+
+
+-- 7. Колико различитих играча је дало бар један гол у сезони 2024/25?
+
+WITH goal_scorers AS (
+    SELECT DISTINCT player_id ,
+            SUM(CASE WHEN event_type IN ('goal', 'penalty_goal', 'own_goal') THEN 1 ELSE 0 END) AS goals_scored
+    FROM match_events 
+    WHERE match_id >= 2000 AND match_id < 3000
+    GROUP BY player_id
+                    )
+SELECT DISTINCT p.player_id,
+                CONCAT(p.first_name, ' ', p.last_name) AS player_name,
+                gs.goals_scored
+FROM players AS p
+JOIN match_events AS me ON me.player_id = p.player_id
+JOIN goal_scorers AS gs ON p.player_id = gs.player_id AND gs.goals_scored > 0;
+
+-- U sezoni 2024/25 čak 330 igrača je postiglo barem jedan gol.
+
+
+
+-- 8. Који судија је највише пута судио утакмице клуба Northport United?
+
+SELECT team_id FROM teams WHERE team_name = 'Northport United'; --1
+
+SELECT  r.referee_id, r.referee_name,
+        COUNT(m.match_id) AS no_of_refs
+FROM referees AS r
+JOIN matches AS m ON m.referee_id = r.referee_id AND (home_team_id = 1 OR away_team_id = 1)
+GROUP BY r.referee_id, r.referee_name
+ORDER BY no_of_refs DESC;
+
+-- Sudija Peter Lindgren sudio je timu Northport United čak 9
+
+
+
+-- 9. Који судија је у сезони 2024/25 имао највећи удео утакмица у којима је досуђен бар један
+-- пенал, дат или промашен?
+
+
+WITH games_with_penalty AS (
+                            SELECT DISTINCT match_id
+                            FROM match_events 
+                            WHERE event_type IN ('penalty_miss','penalty_goal')
+                            ORDER BY match_id
+                            ),
+        total_games_ref AS (
+                            SELECT COUNT(m.match_id)
+                            FROM games_with_penalty AS gwp
+                            JOIN matches AS m ON gwp.match_id = m.match_id AND m.season = '2024/25'
+                            )
+SELECT r.referee_name,
+       COUNT(gwp.match_id) AS matches_with_ref,
+       (SELECT COUNT(m.match_id)
+        FROM games_with_penalty AS gwp
+        JOIN matches AS m ON gwp.match_id = m.match_id AND m.season = '2024/25') AS total_games_with_penalty,
+        ROUND(100 * matches_with_ref / total_games_with_penalty, 2) AS percentage
+FROM referees AS r
+JOIN matches AS m ON r.referee_id = m.referee_id AND m.season = '2024/25'
+LEFT JOIN games_with_penalty AS gwp ON gwp.match_id = m.match_id
+GROUP BY r.referee_name
+ORDER BY percentage DESC;
+        
+-- Najveći udeo u utakmicama sa dosuđenim barem jednim penalom u sezoni 2024/25
+-- ima sudija Peter Lindgren, koji je na čak 9 utakmica pokazao na belu tačku
+-- i tako imao udeo od 8,57%.
+
+
+
+10. Који тренер је освојио највише бодова у утакмицама у којима је његов тим губио на
+полувремену? Рачунајте и домаће и гостујуће утакмице
+
+
+CREATE OR REPLACE VIEW bootcamp.default.team_matches AS
+WITH sides AS (
+                SELECT match_id, season, matchday,
+                kickoff_ts, home_team_id AS team_id, away_team_id AS opponent_id,
+                'home' AS venue, home_goals AS goals_for, away_goals AS goals_against,
+                home_goals_ht AS goals_for_ht, away_goals_ht AS goals_against_ht
+FROM bootcamp.default.matches 
+WHERE status = 'played'
+UNION ALL
+                SELECT match_id, season, matchday,
+                kickoff_ts, away_team_id, home_team_id, 'away',
+                away_goals, home_goals, away_goals_ht, home_goals_ht
+FROM bootcamp.default.matches
+WHERE status = 'played'
+                )
+SELECT *,
+        CASE WHEN goals_for > goals_against THEN 'W'
+             WHEN goals_for = goals_against THEN 'D'
+             ELSE 'L' END AS result,
+        CASE WHEN goals_for > goals_against THEN 3
+             WHEN goals_for = goals_against THEN 1 ELSE 0 END AS points
+FROM sides;
+
+
+SELECT  ms.manager_name,
+        SUM(tm.points) AS points_win_after_ht_losing
+FROM team_matches AS tm
+JOIN manager_spells AS ms ON tm.team_id = ms.team_id
+WHERE goals_for_ht < goals_against_ht AND result = 'W'
+GROUP BY ms.manager_name
+ORDER BY points_win_after_ht_losing DESC;
+
+
+SELECT team_id, COUNT(match_id) AS numb FROM team_matches WHERE goals_for_ht < goals_against_ht AND result = 'W'
+GROUP BY team_id
+ORDER BY numb DESC;     --team_id=9 ima 4 pobede nakon 
+SELECT manager_name FROM manager_spells WHERE team_id = 9; --Zoran Tošić trener tima sa team_id=9
+
+
+-- Trener sa najviše utakmica na kojima je ekipa gubila na poluvremenu,
+-- a na kraju slavila ima Zoran Tošić sa čak 4 utakmice,
+-- odnosno 12 bodova osvojenih iz zaostatka na poluvremenu.
