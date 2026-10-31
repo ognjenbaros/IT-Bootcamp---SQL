@@ -1,0 +1,82 @@
+
+
+
+
+-- 2. Која су три стадиона са највећом просечном посетом у сезони 2024/25?
+
+SELECT  m.season,
+        s.stadium_name,
+        ROUND(AVG(m.attendance), 2) AS avg_att,
+        ROW_NUMBER() OVER (PARTITION BY m.season ORDER BY AVG(m.attendance) DESC) AS rn
+FROM matches AS m
+JOIN stadiums AS s ON m.stadium_id = s.stadium_id
+WHERE m.season = '2024/25'
+GROUP BY m.season, s.stadium_name
+QUALIFY rn <= 3;
+
+-- Tri stadiona sa najvećom prosečnom posetom u sezoni 2024/25
+-- su Harbourside Park, Kingsbridge Stadium i Northport Arena.
+
+
+
+-- 3. За сваки клуб, ко је дао последњи гол клуба у сезони 2024/25 и када? Који клуб је последњи
+-- гол дао најраније?
+
+
+WITH goal_order AS (
+                SELECT team_id, player_id,
+                ROW_NUMBER() OVER (PARTITION BY team_id 
+                ORDER BY match_id DESC, (CASE WHEN added_time IS NULL THEN minute
+                                        ELSE minute + added_time END) DESC) AS rn
+                FROM match_events
+                WHERE match_id >= 2000 AND match_id < 3000 AND event_type IN ('goal', 'own_goal', 'penalty_goal')
+                   )
+SELECT t.team_name, CONCAT(p.first_name, ' ', p.last_name) AS player_name
+FROM goal_order AS go
+JOIN teams AS t ON t.team_id = go.team_id
+JOIN players AS p ON p.player_id = go.player_id
+WHERE go.rn = 1;
+
+
+
+WITH goal_order AS (
+                SELECT team_id, match_id, player_id,
+                ROW_NUMBER() OVER (PARTITION BY team_id 
+                ORDER BY match_id DESC, (CASE WHEN added_time IS NULL THEN minute
+                                        ELSE minute + added_time END) DESC) AS rn
+                FROM match_events
+                WHERE match_id >= 2000 AND match_id < 3000 AND event_type IN ('goal', 'own_goal', 'penalty_goal')
+                QUALIFY rn = 1
+                   )
+SELECT m.kickoff_ts, t.team_name, CONCAT(p.first_name, ' ', p.last_name) AS player_name
+FROM goal_order AS go
+JOIN teams AS t ON t.team_id = go.team_id
+JOIN players AS p ON p.player_id = go.player_id
+JOIN matches AS m ON m.match_id = go.match_id
+WHERE go.rn = 1
+ORDER BY m.kickoff_ts ASC
+LIMIT 1;
+
+-- Poslednji gol u sezoni 2024/25
+-- najranije je postigao Marko Stanković 
+-- za ekipu Elmsworth Wanderers
+-- 3. maja 2025. godine.
+
+
+
+-- 4. За домаће утакмице клуба Northport United у сезони 2024/25 прикажите посету и промену у
+-- односу на претходну домаћу утакмицу. Где је највећи пад?
+
+
+SELECT  t.team_name, m.home_team_id, m.away_team_id, m.kickoff_ts, m.weather,
+        m.attendance,
+        LAG(m.attendance) OVER (ORDER BY m.kickoff_ts) AS att_previous_match,
+        m.attendance - coalesce(att_previous_match, 0) AS att_diff
+FROM matches AS m
+JOIN teams AS t ON t.team_id = m.home_team_id AND t.team_name = 'Northport United'
+WHERE m.season = '2024/25'
+ORDER BY att_diff;
+
+-- Najveći pad posete na domaćoj utakmici u sezoni 2024/25
+-- ekipa Northport United imala je 10. novembra 2024.
+-- kad je pad bio preko 10 hiljada gledalaca.
