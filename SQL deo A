@@ -165,7 +165,7 @@ SELECT  ms.manager_name,
         SUM(tm.points) AS points_win_after_ht_losing
 FROM team_matches AS tm
 JOIN manager_spells AS ms ON tm.team_id = ms.team_id
-WHERE goals_for_ht < goals_against_ht AND result = 'W'
+WHERE goals_for_ht < goals_against_ht AND (result = 'W' OR result = 'D')
 GROUP BY ms.manager_name
 ORDER BY points_win_after_ht_losing DESC;
 
@@ -177,5 +177,6 @@ SELECT manager_name FROM manager_spells WHERE team_id = 9; --Zoran Tošić trene
 
 
 -- Trener sa najviše utakmica na kojima je ekipa gubila na poluvremenu,
--- a na kraju slavila ima Zoran Tošić sa čak 4 utakmice,
--- odnosno 12 bodova osvojenih iz zaostatka na poluvremenu.
+-- a na kraju osvojila bodove ima Zoran Tošić sa čak 4 dobijene utakmice i
+-- 6 nerešenih konačnih rezultata, odnosno ukupno 18 bodova osvojenih
+-- iz zaostatka na poluvremenu.
