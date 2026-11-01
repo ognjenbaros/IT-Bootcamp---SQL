@@ -1,0 +1,70 @@
+
+
+--  1)
+
+-- dim_team
+
+CREATE OR REPLACE TABLE dim_team AS 
+SELECT DISTINCT team_id, team_name 
+FROM teams;
+
+
+-- dim_date
+
+CREATE OR REPLACE TABLE dim_date AS
+SELECT CAST(DATE_FORMAT (date, 'yyyyMMdd') AS INT) AS date_key,
+            date                                   AS full_date,
+            DATE_FORMAT(date, 'EEEE')              AS weekday_name,
+            DAYOFWEEK(date) IN (1,7)              AS is_weekend,
+            CASE WHEN MONTH(date) >= 7 THEN CONCAT(YEAR(date), '/', SUBSTRING(CAST(YEAR(date) + 1 AS STRING), 3, 2))
+                 ELSE CONCAT(YEAR(date) - 1, '/', SUBSTRING(CAST(YEAR(date) AS STRING), 3, 2))
+            END                                    AS season
+FROM (SELECT EXPLODE(SEQUENCE(DATE'2023-07-01', DATE'2025-06-30', INTERVAL 1 DAY)) AS date);
+
+
+-- dim_player
+
+CREATE OR REPLACE TABLE dim_player AS 
+SELECT DISTINCT player_id, CONCAT(first_name,' ', last_name) AS player_name 
+FROM players
+UNION ALL
+SELECT -1, 'Unknown player';
+
+
+-- dim_referee
+
+CREATE OR REPLACE TABLE dim_referee AS 
+SELECT DISTINCT referee_id, referee_name 
+FROM referees;
+
+
+--fact_card
+
+CREATE OR REPLACE TABLE fact_card AS
+SELECT  me.event_id AS event_id,
+        me.match_id AS match_id,
+        DATE_FORMAT(m.kickoff_ts, 'yyyyMMdd') AS date_key,
+        me.team_id AS team_id, 
+        me.player_id AS player_id,
+        r.referee_id AS refree_id,
+        CASE WHEN me.event_type IN ('yellow_card') THEN 'yellow_card'
+             WHEN me.event_type IN ('second_yellow') THEN 'second_yellow'
+             WHEN me.event_type IN ('red_card') THEN 'red_card' END AS card
+FROM match_events AS me
+JOIN matches AS m ON m.match_id = me.match_id
+JOIN referees AS r ON m.referee_id = r.referee_id
+WHERE me.event_type IN ('yellow_card', 'second_yellow', 'red_card');
+
+
+-- 2)
+
+SELECT COUNT(match_id) FROM match_events WHERE event_type IN ('yellow_card', 'second_yellow', 'red_card');      --2678
+
+SELECT COUNT(event_id) FROM fact_card;  --2678
+
+
+-- 3)   0
+
+SELECT COUNT(fc.event_id) FROM fact_card AS fc
+LEFT JOIN dim_player AS dp ON dp.player_id = fc.player_id
+WHERE dp.player_id = -1
