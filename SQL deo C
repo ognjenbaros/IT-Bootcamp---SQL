@@ -1,4 +1,18 @@
 
+-- 1. Колики удео у укупном броју голова лиге у сезони 2024/25 има сваки клуб? Ко има највећи
+-- удео?
+
+SELECT DISTINCT t.team_name,
+        SUM(tm.goals_for) OVER (PARTITION BY tm.team_id) AS team_goals,
+        (SELECT SUM(goals_for + goals_against) / 2 FROM team_matches WHERE season = '2024/25') AS total_goals,
+        CONCAT(ROUND(100 * team_goals / total_goals, 2), '%') AS percentage
+FROM team_matches AS tm
+JOIN teams AS t ON t.team_id = tm.team_id
+WHERE tm.season = '2024/25'
+ORDER BY percentage DESC;
+
+-- U sezoni 2024/25 najveći udeo u ukupnom broju golova
+-- ima ekipa Kingsbridge City sa 7,6%
 
 
 
@@ -80,3 +94,24 @@ ORDER BY att_diff;
 -- Najveći pad posete na domaćoj utakmici u sezoni 2024/25
 -- ekipa Northport United imala je 10. novembra 2024.
 -- kad je pad bio preko 10 hiljada gledalaca.
+
+
+
+-- 5. Пратите бодове клуба Northport City утакмицу по утакмицу у сезони 2024/25. У којој
+-- утакмици по реду и ког датума је прешао 50 бодова?
+
+SELECT team_id, team_name FROM teams WHERE team_name = 'Northport City'; --  team_id = 2
+
+SELECT  match_id,
+        ROW_NUMBER() OVER (ORDER BY kickoff_ts) AS game_in_season,
+        DATE(kickoff_ts) AS match_date,
+        SUM(points) OVER (ORDER BY kickoff_ts ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS points_so_far,
+        result
+FROM team_matches
+WHERE team_id = 2 AND season = '2024/25'
+QUALIFY points_so_far >= 50
+ORDER BY kickoff_ts;
+
+-- Ekipa Northport City u srpsku Novu godinu ušla je
+-- sa više od 50 bodova, jer je 12. januara odnela pobedu
+-- u 21. utakmici sezone 2024/25.
